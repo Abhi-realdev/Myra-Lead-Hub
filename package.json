@@ -1,0 +1,30 @@
+{
+  "name": "myra-academy-lead-outreach",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"node server.js\" \"vite\"",
+    "api": "node server.js",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "firebase": "^10.13.0",
+    "react-router-dom": "^6.26.0",
+    "lucide-react": "^0.400.0",
+    "date-fns": "^3.6.0",
+    "@sendgrid/mail": "^8.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "concurrently": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.3.4"
+  }
+}
