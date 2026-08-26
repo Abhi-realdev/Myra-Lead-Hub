@@ -157,6 +157,9 @@ app.get('/api/whatsapp/webhook', (request, response) => {
 });
 
 app.post('/api/whatsapp/webhook', (request, response) => {
+console.log('🔥 WHATSAPP WEBHOOK HIT');
+console.log('Webhook headers:', request.headers);
+console.log('Webhook body:', JSON.stringify(request.body, null, 2));
   if (request.body.object !== 'whatsapp_business_account') {
     return response.sendStatus(404);
   }
