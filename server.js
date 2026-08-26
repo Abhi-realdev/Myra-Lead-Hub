@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import sgMail from '@sendgrid/mail';
+import { normalizeRecipient } from './utils/phoneNumber.js';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -13,15 +14,6 @@ const whatsappTemplateName = process.env.WHATSAPP_TEMPLATE_NAME;
 const whatsappTemplateLanguage = process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US';
 const whatsappDefaultCountryCode = process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || '91';
 const whatsappWebhookVerifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
-const countryCallingCodes = {
-  india: '91',
-  'saudi arabia': '966',
-  'saudi_arabia': '966',
-  'saudi-arabia': '966',
-  saudi: '966',
-  ksa: '966'
-};
-
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/whatsapp/health', (request, response) => {
@@ -86,24 +78,11 @@ app.post('/api/whatsapp', async (request, response) => {
     return response.status(400).json({ message: 'WhatsApp recipient and lead name are required.' });
   }
 
-  const recipientNumber = to.replace(/[^\d]/g, '');
-  const normalizedCountry = country?.toLowerCase().trim().replace(/[._-]+/g, ' ');
-  const countryCode = countryCallingCodes[normalizedCountry] || whatsappDefaultCountryCode;
-  const knownCountryCodes = Object.values(countryCallingCodes);
-  const hasKnownCountryCode = knownCountryCodes.some(code => recipientNumber.startsWith(code));
-
-  if (countryCode === '966' && recipientNumber.startsWith('91')) {
-    return response.status(400).json({
-      message: 'This lead is marked as Saudi Arabia, but the phone number has India country code 91. Enter the Saudi number with +966, for example +9665XXXXXXXX.'
-    });
-  }
-
-  const normalizedRecipient = recipientNumber.length === 10 && !hasKnownCountryCode
-    ? `${countryCode}${recipientNumber.replace(/^0/, '')}`
-    : recipientNumber;
-
-  if (normalizedRecipient.length < 11) {
-    return response.status(400).json({ message: 'WhatsApp number must include a country code or be a valid 10-digit local number.' });
+  let normalizedRecipient;
+  try {
+    normalizedRecipient = normalizeRecipient(to, country, whatsappDefaultCountryCode);
+  } catch (error) {
+    return response.status(400).json({ message: error.message });
   }
 
   try {
