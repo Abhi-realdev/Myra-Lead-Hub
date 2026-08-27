@@ -1,7 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
-import sgMail from '@sendgrid/mail';
+import { formatSendGridError, sendWithSendGrid } from './utils/sendgridMail.js';
 import { normalizeRecipient } from './utils/phoneNumber.js';
+import { listWhatsAppTemplates, sendWhatsAppTemplateMessage, submitLeadWelcomeTemplate } from './utils/whatsappCloud.js';
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -14,6 +15,20 @@ const whatsappTemplateName = process.env.WHATSAPP_TEMPLATE_NAME;
 const whatsappTemplateLanguage = process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US';
 const whatsappDefaultCountryCode = process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || '91';
 const whatsappWebhookVerifyToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
+const whatsappWabaId = process.env.WHATSAPP_WABA_ID;
+
+app.use((request, response, next) => {
+  response.setHeader('Access-Control-Allow-Origin', request.headers.origin || '*');
+  response.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (request.method === 'OPTIONS') {
+    return response.sendStatus(204);
+  }
+
+  next();
+});
+
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/whatsapp/health', (request, response) => {
@@ -22,47 +37,82 @@ app.get('/api/whatsapp/health', (request, response) => {
     phoneNumberIdConfigured: Boolean(whatsappPhoneNumberId),
     templateConfigured: Boolean(whatsappTemplateName),
     templateLanguage: whatsappTemplateLanguage,
+    wabaIdConfigured: Boolean(whatsappWabaId),
     defaultCountryCode: whatsappDefaultCountryCode
   });
+});
+
+app.get('/api/whatsapp/templates', async (request, response) => {
+  if (!whatsappAccessToken || !whatsappPhoneNumberId) {
+    return response.status(503).json({
+      message: 'WhatsApp is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.'
+    });
+  }
+
+  const listing = await listWhatsAppTemplates({
+    apiVersion: whatsappApiVersion,
+    phoneNumberId: whatsappPhoneNumberId,
+    accessToken: whatsappAccessToken,
+    wabaId: whatsappWabaId
+  });
+
+  if (listing.error) {
+    return response.status(502).json({
+      message: listing.error,
+      wabaId: listing.wabaId,
+      templates: []
+    });
+  }
+
+  return response.json({
+    wabaId: listing.wabaId,
+    templates: listing.templates.map(template => ({
+      name: template.name,
+      language: template.language,
+      status: template.status,
+      category: template.category,
+      rejectedReason: template.rejected_reason || null
+    }))
+  });
+});
+
+app.post('/api/whatsapp/templates/lead-welcome', async (request, response) => {
+  if (!whatsappAccessToken || !whatsappPhoneNumberId) {
+    return response.status(503).json({
+      message: 'WhatsApp is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.'
+    });
+  }
+
+  const result = await submitLeadWelcomeTemplate({
+    apiVersion: whatsappApiVersion,
+    phoneNumberId: whatsappPhoneNumberId,
+    accessToken: whatsappAccessToken,
+    wabaId: whatsappWabaId
+  });
+
+  return response.status(result.status).json(result.body);
 });
 
 app.post('/api/email', async (request, response) => {
   const { to, subject, html, text, replyTo } = request.body;
 
-  if (!process.env.SENDGRID_API_KEY) {
-    return response.status(503).json({ message: 'SENDGRID_API_KEY is not configured on the server.' });
-  }
-
-  if (!to || !subject || !html) {
-    return response.status(400).json({ message: 'Email recipient, subject, and HTML content are required.' });
-  }
-
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-
   try {
-    const [result] = await sgMail.send({
+    const result = await sendWithSendGrid({
+      apiKey: process.env.SENDGRID_API_KEY,
       to,
-      from: { email: fromEmail, name: "Myra's Academy" },
-      replyTo: { email: replyTo || replyToEmail, name: "Myra's Academy" },
       subject,
-      text: text || html.replace(/<[^>]+>/g, ' '),
-      html
+      html,
+      text,
+      fromEmail,
+      replyToEmail: replyTo || replyToEmail
     });
 
-    return response.json({
-      success: true,
-      messageId: result.headers['x-message-id'] || `sg_${Date.now()}`,
-      provider: 'sendgrid'
-    });
+    return response.json(result);
   } catch (error) {
-    const message = error.response?.body?.errors?.map(item => item.message).join(', ') || error.message;
+    const message = formatSendGridError(error);
     console.error('SendGrid email error:', message);
-    return response.status(error.code >= 400 && error.code < 600 ? error.code : 502).json({ message });
+    return response.status(error.statusCode || (error.code >= 400 && error.code < 600 ? error.code : 502)).json({ message });
   }
-});
-
-app.listen(port, () => {
-  console.log(`Email API listening on http://localhost:${port}`);
 });
 
 app.post('/api/whatsapp', async (request, response) => {
@@ -86,57 +136,25 @@ app.post('/api/whatsapp', async (request, response) => {
   }
 
   try {
-    const graphResponse = await fetch(`https://graph.facebook.com/${whatsappApiVersion}/${whatsappPhoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${whatsappAccessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: normalizedRecipient,
-        type: 'template',
-        template: {
-          name: whatsappTemplateName,
-          language: { code: whatsappTemplateLanguage },
-          components: [{
-            type: 'body',
-            parameters: [
-              { type: 'text', text: name },
-              { type: 'text', text: program || 'our programs' },
-              { type: 'text', text: goal || 'your educational goals' }
-            ]
-          }]
-        }
-      })
+    const result = await sendWhatsAppTemplateMessage({
+      apiVersion: whatsappApiVersion,
+      phoneNumberId: whatsappPhoneNumberId,
+      accessToken: whatsappAccessToken,
+      templateName: whatsappTemplateName,
+      templateLanguage: whatsappTemplateLanguage,
+      wabaId: whatsappWabaId,
+      to: normalizedRecipient,
+      name,
+      program,
+      goal
     });
 
-    const result = await graphResponse.json().catch(() => ({}));
-    if (!graphResponse.ok) {
-      const metaError = result.error;
-      const message = metaError?.code === 131030
-        ? `Recipient ${normalizedRecipient} is not in the WhatsApp test allowlist. Add this number in Meta WhatsApp API Setup, or move the app to production after business verification and user opt-in.`
-        : metaError?.message || 'WhatsApp Cloud API request failed.';
-      console.error('WhatsApp Cloud API rejected message:', {
-        status: graphResponse.status,
-        recipient: normalizedRecipient,
-        code: metaError?.code,
-        type: metaError?.type,
-        message
-      });
-      return response.status(graphResponse.status).json({
-        message,
-        code: metaError?.code,
-        type: metaError?.type,
-        recipient: normalizedRecipient
-      });
+    if (!result.ok) {
+      console.error('WhatsApp Cloud API rejected message:', result.body);
+      return response.status(result.status).json(result.body);
     }
 
-    return response.json({
-      success: true,
-      messageId: result.messages?.[0]?.id,
-      provider: 'whatsapp-cloud-api'
-    });
+    return response.json(result.body);
   } catch (error) {
     console.error('WhatsApp API error:', error);
     return response.status(502).json({
@@ -190,4 +208,8 @@ console.log('Webhook body:', JSON.stringify(request.body, null, 2));
   }
 
   return response.sendStatus(200);
+});
+
+app.listen(port, () => {
+  console.log(`API listening on http://localhost:${port}`);
 });

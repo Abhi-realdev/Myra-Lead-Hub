@@ -32,7 +32,21 @@ for (const countryCode of getCountries()) {
   }
 }
 
+function isUsableCountryInput(country) {
+  const raw = String(country || '').trim();
+  return Boolean(raw) && !/^(unknown|n\/a|na|-)$/i.test(raw);
+}
+
 function getCountryCode(country) {
+  if (!isUsableCountryInput(country)) {
+    return undefined;
+  }
+
+  const isoCode = String(country).trim().toUpperCase();
+  if (/^[A-Z]{2}$/.test(isoCode) && getCountries().includes(isoCode)) {
+    return isoCode;
+  }
+
   const normalizedCountry = normalizeCountryName(country);
   return countryAliases[normalizedCountry] || countryNames.get(normalizedCountry);
 }
@@ -44,9 +58,10 @@ export function normalizeRecipient(to, country, fallbackCountryCode = '91') {
   }
 
   const countryCode = getCountryCode(country);
-  const defaultCountry = countryCode || (country ? null : getCountries().find(code =>
+  const fallbackCountry = getCountries().find(code =>
     getCountryCallingCode(code) === String(fallbackCountryCode)
-  ));
+  );
+  const defaultCountry = countryCode || (isUsableCountryInput(country) ? null : fallbackCountry);
   const input = String(to).trim();
   const phoneNumber = input.startsWith('+') || digits.length > 10
     ? parsePhoneNumberFromString(`+${digits}`)

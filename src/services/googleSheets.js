@@ -40,7 +40,7 @@ export async function fetchLeadsFromSheet() {
         name: lead.full_name || 'Unknown',
         country: lead["which_country_are_you_currently_residing_in?"] || lead.country || 'Unknown',
         phone: lead.phone || lead.work_phone_number || '',
-        email: lead.email || '',
+        email: String(lead.email || lead.email_address || lead['e-mail'] || '').trim(),
         status: normalizeStatus(lead.lead_status),
         contactedAt: lead.created_time ? new Date(lead.created_time) : null,
         

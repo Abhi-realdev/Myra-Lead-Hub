@@ -1,6 +1,15 @@
 import { normalizeRecipient } from '../../utils/phoneNumber.js';
+import { sendWhatsAppTemplateMessage } from '../../utils/whatsappCloud.js';
 
 export async function handleWhatsApp(request, response) {
+  response.setHeader('Access-Control-Allow-Origin', request.headers.origin || '*');
+  response.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (request.method === 'OPTIONS') {
+    return response.status(204).end();
+  }
+
   const { to, country, name, program, goal } = request.body || {};
 
   if (!process.env.WHATSAPP_ACCESS_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_TEMPLATE_NAME) {
@@ -19,41 +28,25 @@ export async function handleWhatsApp(request, response) {
   }
 
   try {
-    const graphResponse = await fetch(`https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || 'v20.0'}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: normalizedRecipient,
-        type: 'template',
-        template: {
-          name: process.env.WHATSAPP_TEMPLATE_NAME,
-          language: { code: process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US' },
-          components: [{
-            type: 'body',
-            parameters: [
-              { type: 'text', text: name },
-              { type: 'text', text: program || 'our programs' },
-              { type: 'text', text: goal || 'your educational goals' }
-            ]
-          }]
-        }
-      })
+    const result = await sendWhatsAppTemplateMessage({
+      apiVersion: process.env.WHATSAPP_API_VERSION || 'v20.0',
+      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+      accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
+      templateName: process.env.WHATSAPP_TEMPLATE_NAME,
+      templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en_US',
+      wabaId: process.env.WHATSAPP_WABA_ID,
+      to: normalizedRecipient,
+      name,
+      program,
+      goal
     });
 
-    const result = await graphResponse.json().catch(() => ({}));
-    if (!graphResponse.ok) {
-      const metaError = result.error;
-      const message = metaError?.code === 131030
-        ? `Recipient ${normalizedRecipient} is not in the WhatsApp test allowlist. Add it in Meta WhatsApp API Setup or move the app to production.`
-        : metaError?.message || 'WhatsApp Cloud API request failed.';
-      return response.status(graphResponse.status).json({ message, code: metaError?.code, type: metaError?.type, recipient: normalizedRecipient });
+    if (!result.ok) {
+      console.error('WhatsApp Cloud API rejected message:', result.body);
+      return response.status(result.status).json(result.body);
     }
 
-    return response.json({ success: true, messageId: result.messages?.[0]?.id, provider: 'whatsapp-cloud-api' });
+    return response.json(result.body);
   } catch (error) {
     console.error('WhatsApp API error:', error);
     return response.status(502).json({ message: `WhatsApp request could not be completed for ${normalizedRecipient}: ${error.message}`, recipient: normalizedRecipient });

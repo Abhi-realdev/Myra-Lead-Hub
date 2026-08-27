@@ -39,7 +39,7 @@ function Login() {
         <div className="login-header">
           <div className="logo-container">
             <img 
-              src="https://images.pexels.com/photos/5905857/pexels-photo-5905857.jpeg?auto=compress&cs=tinysrgb&w=100&h=100&fit=crop" 
+              src="https://highereducation.myraacademy.com/wp-content/uploads/2021/04/logo_myra-05.png" 
               alt="Myra's Academy" 
               className="logo"
             />

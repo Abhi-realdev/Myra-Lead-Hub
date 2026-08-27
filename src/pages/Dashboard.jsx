@@ -329,7 +329,7 @@ function Dashboard({ user }) {
             <div className="header-left">
               <div className="header-logo">
                 <img 
-                  src="https://images.pexels.com/photos/5905857/pexels-photo-5905857.jpeg?auto=compress&cs=tinysrgb&w=60&h=60&fit=crop" 
+                  src="https://highereducation.myraacademy.com/wp-content/uploads/2021/04/logo_myra-05.png" 
                   alt="Myra's Academy" 
                 />
               </div>
@@ -366,7 +366,7 @@ function Dashboard({ user }) {
             <div className="header-left">
               <div className="header-logo">
                 <img 
-                  src="https://images.pexels.com/photos/5905857/pexels-photo-5905857.jpeg?auto=compress&cs=tinysrgb&w=60&h=60&fit=crop" 
+                  src="https://highereducation.myraacademy.com/wp-content/uploads/2021/04/logo_myra-05.png" 
                   alt="Myra's Academy" 
                 />
               </div>
@@ -407,7 +407,7 @@ function Dashboard({ user }) {
           <div className="header-left">
             <div className="header-logo">
               <img 
-                src="https://images.pexels.com/photos/5905857/pexels-photo-5905857.jpeg?auto=compress&cs=tinysrgb&w=60&h=60&fit=crop" 
+                src="https://highereducation.myraacademy.com/wp-content/uploads/2021/04/logo_myra-05.png" 
                 alt="Myra's Academy" 
               />
             </div>

@@ -26,10 +26,14 @@ export async function sendWhatsAppMessage(lead) {
       throw new Error(result.message || `WhatsApp service returned HTTP ${response.status}. Check the API terminal for the Meta error.`);
     }
 
+    if (!result.success && !result.messageId) {
+      throw new Error('WhatsApp API did not confirm the message. Check that /api/whatsapp is routed to the API server, not the dashboard.');
+    }
+
     return result;
   } catch (error) {
-    if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      throw new Error('WhatsApp service is unavailable. Start the API server and try again.');
+    if (error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message)) {
+      throw new Error('WhatsApp service is unavailable. Start the API with npm run dev (or npm run api) and try again.');
     }
     throw error;
   }
